@@ -314,6 +314,11 @@ public final class AWSMobileClient implements AWSCredentialsProvider {
     boolean mIsPersistenceEnabled = true;
 
     /**
+     * By default, this is set to false.
+     */
+    boolean mCustomAuthEnabled = true;
+
+    /**
      * Constructor invoked by getInstance.
      *
      * @throws AssertionError when this is called with context more than once.
@@ -469,7 +474,9 @@ public final class AWSMobileClient implements AWSCredentialsProvider {
                     }
 
                     mIsPersistenceEnabled = true; // Default value
-                    // Read Persistence key from the awsconfiguration.json and set the flag
+                    mCustomAuthEnabled = false; // Default value
+
+                    // Read Persistence key from the awsconfiguration.json and set the flags
                     // appropriately.
                     try {
                         if (awsConfiguration.optJsonObject(AUTH_KEY) != null &&
@@ -477,6 +484,14 @@ public final class AWSMobileClient implements AWSCredentialsProvider {
                             mIsPersistenceEnabled = awsConfiguration
                                     .optJsonObject(AUTH_KEY)
                                     .getBoolean("Persistence");
+                        }
+
+                        if (
+                                awsConfiguration.optJsonObject(AUTH_KEY) != null &&
+                                awsConfiguration.optJsonObject(AUTH_KEY).has("authenticationFlowType") &&
+                                awsConfiguration.optJsonObject(AUTH_KEY).getString("authenticationFlowType").equals("CUSTOM_AUTH")
+                        ) {
+                            mCustomAuthEnabled = true;
                         }
                     } catch (final Exception ex) {
                         // If reading from awsconfiguration.json fails, invoke callback.
@@ -765,6 +780,12 @@ public final class AWSMobileClient implements AWSCredentialsProvider {
                 }
             }
         }
+    }
+
+    public boolean isCustomAuthEnabled() { return mCustomAuthEnabled; }
+
+    public void setCustomAuthEnabled(boolean customAuthEnabled) {
+        mCustomAuthEnabled = customAuthEnabled;
     }
 
     /**
@@ -1213,25 +1234,16 @@ public final class AWSMobileClient implements AWSCredentialsProvider {
                             @Override
                             public void getAuthenticationDetails(AuthenticationContinuation authenticationContinuation, String userId) {
                                 Log.d(TAG, "Sending password.");
-                                try {
-                                    if (
-                                            awsConfiguration.optJsonObject(AUTH_KEY) != null &&
-                                            awsConfiguration.optJsonObject(AUTH_KEY).has("authenticationFlowType") &&
-                                            awsConfiguration.optJsonObject(AUTH_KEY).getString("authenticationFlowType").equals("CUSTOM_AUTH")
-                                    ) {
-                                        final HashMap<String, String> authParameters = new HashMap<String, String>();
-                                        if (password != null) {
-                                            authenticationContinuation.setAuthenticationDetails(new AuthenticationDetails(username, password, authParameters, validationData));
-                                        } else {
-                                            authenticationContinuation.setAuthenticationDetails(new AuthenticationDetails(username, authParameters, validationData));
-                                        }
+                                if (mCustomAuthEnabled) {
+                                    final HashMap<String, String> authParameters = new HashMap<String, String>();
+                                    if (password != null) {
+                                        authenticationContinuation.setAuthenticationDetails(new AuthenticationDetails(username, password, authParameters, validationData));
                                     } else {
-                                        authenticationContinuation.setAuthenticationDetails(new AuthenticationDetails(username, password, validationData));
+                                        authenticationContinuation.setAuthenticationDetails(new AuthenticationDetails(username, authParameters, validationData));
                                     }
-                                } catch (JSONException e) {
-                                    e.printStackTrace();
+                                } else {
+                                    authenticationContinuation.setAuthenticationDetails(new AuthenticationDetails(username, password, validationData));
                                 }
-
                                 authenticationContinuation.continueTask();
                             }
 
